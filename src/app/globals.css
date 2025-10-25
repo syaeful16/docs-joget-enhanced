@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* BlockNote Editor Styling - Notion-like */
+.bn-editor {
+  background-color: white !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif !important;
+  line-height: 1.6 !important;
+  color: #0f172a !important;
+}
+
+.bn-editor .bn-block-content {
+  background-color: white !important;
+  border: none !important;
+  padding: 0.125rem 0 !important;
+  min-height: 1.5rem !important;
+}
+
+.bn-editor .bn-editor-content {
+  background-color: white !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.bn-editor .bn-block {
+  background-color: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Remove focus rings and borders */
+.bn-editor .bn-block-content:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Code Block Specific Styling - dark theme for visibility */
+.bn-editor pre,
+.bn-editor pre[class*="language-"],
+.bn-editor .bn-code-block,
+.bn-editor [data-node-type="codeBlock"] {
+  background-color: #f3f4f6 !important;
+  color: #374151 !important;
+  border-radius: 0.5rem !important;
+  overflow: auto !important;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+}
+
+.bn-editor pre code,
+.bn-editor [data-node-type="codeBlock"] code {
+  background: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-family: inherit !important;
+}
+
+/* Language selector styling */
+.bn-editor .bn-code-block-language {
+  background-color: #1f2937 !important;
+  color: #e5e7eb !important;
+  border: 1px solid #374151 !important;
+  border-radius: 0.25rem !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.75rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+/* Token colors fallback */
+.bn-editor code .token.comment,
+.bn-editor code .token.prolog,
+.bn-editor code .token.doctype,
+.bn-editor code .token.cdata { color: #9aa4b2 !important; }
+.bn-editor code .token.punctuation { color: #cbd5e1 !important; }
+.bn-editor code .token.property,
+.bn-editor code .token.tag,
+.bn-editor code .token.boolean,
+.bn-editor code .token.number,
+.bn-editor code .token.constant,
+.bn-editor code .token.symbol { color: #fca5a5 !important; }
+.bn-editor code .token.selector,
+.bn-editor code .token.attr-name,
+.bn-editor code .token.string,
+.bn-editor code .token.char,
+.bn-editor code .token.builtin,
+.bn-editor code .token.inserted { color: #86efac !important; }
+.bn-editor code .token.operator,
+.bn-editor code .token.entity,
+.bn-editor code .token.url,
+.bn-editor code .language-css .token.string,
+.bn-editor code .style .token.string,
+.bn-editor code .token.variable { color: #f8fafc !important; }
+.bn-editor code .token.atrule,
+.bn-editor code .token.attr-value,
+.bn-editor code .token.function,
+.bn-editor code .token.class-name { color: #93c5fd !important; }
+.bn-editor code .token.keyword { color: #c4b5fd !important; }
+.bn-editor code .token.regex,
+.bn-editor code .token.important { color: #fde68a !important; }
+.bn-editor code .token.deleted { color: #fca5a5 !important; }
+
+/* Inline code chip */
+.bn-editor code:not(pre code) {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  padding: 0.125rem 0.375rem !important;
+  border-radius: 0.25rem !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* Remove any default margins/padding from the editor container */
+.bn-editor-container {
+  background-color: white !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Syntax highlighting untuk custom code block */
+.language-javascript { color: #f7df1e; }
+.language-typescript { color: #3178c6; }
+.language-html { color: #e34c26; }
+.language-css { color: #1572b6; }
+.language-python { color: #3776ab; }
+.language-java { color: #ed8b00; }
+.language-cpp { color: #00599c; }
+.language-c { color: #a8b9cc; }
+.language-csharp { color: #239120; }
+.language-php { color: #777bb4; }
+.language-ruby { color: #cc342d; }
+.language-go { color: #00add8; }
+.language-rust { color: #000000; }
+.language-swift { color: #fa7343; }
+.language-kotlin { color: #7f52ff; }
+.language-scala { color: #dc322f; }
+.language-r { color: #276dc3; }
+.language-sql { color: #336791; }
+.language-bash { color: #4eaa25; }
+.language-powershell { color: #012456; }
+.language-yaml { color: #cb171e; }
+.language-json { color: #000000; }
+.language-xml { color: #ff6600; }
+.language-markdown { color: #083fa1; }
+.language-plaintext { color: #333333; }
