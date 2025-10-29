@@ -61,7 +61,7 @@ body {
 .bn-editor pre[class*="language-"],
 .bn-editor .bn-code-block,
 .bn-editor [data-node-type="codeBlock"] {
-  background-color: #f3f4f6 !important;
+  background-color: #f9f9f9 !important;
   color: #374151 !important;
   border-radius: 0.5rem !important;
   overflow: auto !important;
@@ -167,3 +167,16 @@ body {
 .language-xml { color: #ff6600; }
 .language-markdown { color: #083fa1; }
 .language-plaintext { color: #333333; }
+
+/* Hilangkan border/outline dashed saat CodeMirror fokus */
+.cm-no-focus-outline .cm-editor.cm-focused,
+.cm-no-focus-outline .cm-editor:focus,
+.cm-no-focus-outline .cm-editor:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Opsional: jika ada border dari theme, samakan warnanya saat fokus */
+.cm-no-focus-outline .cm-editor {
+  border: none; /* atau set ke 1px solid #e5e7eb */
+}
