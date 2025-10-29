@@ -24,6 +24,29 @@ export default function DocsPage() {
     const [loadingDocs, setLoadingDocs] = useState<boolean>(true)
     const [loadingCreateDoc, setLoadingCreateDoc] = useState<boolean>(false)
 
+    // Modal: New Document
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalMounted, setModalMounted] = useState(false);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [formTitle, setFormTitle] = useState<string>("");
+    const [formCategory, setFormCategory] = useState<string>("Form Element");
+    const [formError, setFormError] = useState<string | null>(null);
+    const CATEGORIES = [
+        "Form Element",
+        "Permission",
+        "Validator",
+        "Plugin",
+        "App",
+        "Helper",
+        "Tutorial",
+        "Other",
+    ];
+
+    // Modal: Delete Document
+    const [deleteModalMounted, setDeleteModalMounted] = useState(false);
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+
     // Ambil dokumen user saat ini
     useEffect(() => {
         if (!user) return;
@@ -48,35 +71,80 @@ export default function DocsPage() {
         fetchDocs();
     }, [user]);
 
-    // Buat dokumen baru
-    const handleCreate = async () => {
-        if (!user) return;
-
-        setLoadingCreateDoc(true)
-        const { data, error } = await supabase
-            .from("docs")
-            .insert({
-                user_id: user.id,
-                title: "Untitled Document",
-            })
-            .select()
-            .single();
-
-        if (error) {
-            console.error(error);
-        } else {
-            router.push(`/dashboard/docs/${data.id}`);
-        }
-        setLoadingCreateDoc(false)
+    // Buka modal create
+    const handleOpenCreateModal = () => {
+        setFormTitle("");
+        setFormCategory(CATEGORIES[0]);
+        setFormError(null);
+        setIsModalOpen(true);
+        setModalMounted(true);
+        // Next tick: play enter animation
+        requestAnimationFrame(() => setModalVisible(true));
     };
 
-    // Hapus dokumen
-    const handleDelete = async (docId: string, e: React.MouseEvent) => {
-        e.stopPropagation(); // Prevent navigation when clicking delete
-        
-        if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+    const closeCreateModal = () => {
+        if (loadingCreateDoc) return;
+        // Play exit animation then unmount
+        setModalVisible(false);
+        setTimeout(() => {
+            setModalMounted(false);
+            setIsModalOpen(false);
+        }, 200); // duration should match transition
+    };
+
+    // Submit create dokumen baru
+    const handleCreateSubmit = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+        if (!user) return;
+        if (!formTitle.trim()) {
+            setFormError("Title is required.");
             return;
         }
+        setFormError(null);
+        setLoadingCreateDoc(true);
+        try {
+            const { data, error } = await supabase
+                .from("docs")
+                .insert({
+                    user_id: user.id,
+                    title: formTitle.trim(),
+                    category: formCategory,
+                })
+                .select("id")
+                .single();
+
+            if (error) {
+                console.error(error);
+                setFormError("Failed to create document. Please try again.");
+                return;
+            }
+            // Close modal with animation and navigate
+            closeCreateModal();
+            if (data?.id) router.push(`/dashboard/docs/${data.id}`);
+        } finally {
+            setLoadingCreateDoc(false);
+        }
+    };
+
+    // Buka modal delete
+    const openDeleteModal = (doc: Doc, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setDeleteTarget({ id: doc.id, title: doc.title });
+        setDeleteModalMounted(true);
+        requestAnimationFrame(() => setDeleteModalVisible(true));
+    };
+
+    const closeDeleteModal = () => {
+        setDeleteModalVisible(false);
+        setTimeout(() => {
+            setDeleteModalMounted(false);
+            setDeleteTarget(null);
+        }, 200);
+    };
+
+    // Hapus dokumen (tanpa native confirm, dipanggil dari modal)
+    const handleDelete = async (docId: string, e?: React.MouseEvent) => {
+        e?.stopPropagation(); // Prevent navigation when clicking delete
 
         setDeletingId(docId);
         
@@ -92,6 +160,7 @@ export default function DocsPage() {
             } else {
                 // Remove from local state
                 setDocs(docs.filter(doc => doc.id !== docId));
+                closeDeleteModal();
             }
         } catch (error) {
             console.error("Error deleting document:", error);
@@ -156,7 +225,7 @@ export default function DocsPage() {
                         <p className="mt-2 text-sm text-gray-600">Create and manage your documentation</p>
                     </div>
                     <button
-                        onClick={handleCreate}
+                        onClick={handleOpenCreateModal}
                         className="inline-flex items-center gap-2 px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
                     >
                         {loadingCreateDoc ? (
@@ -182,7 +251,7 @@ export default function DocsPage() {
                         <h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
                         <p className="text-gray-500 mb-8 max-w-sm mx-auto">Get started by creating your first document to organize your thoughts and ideas.</p>
                         <button
-                            onClick={handleCreate}
+                            onClick={handleOpenCreateModal}
                             className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
                         >
                             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,7 +285,7 @@ export default function DocsPage() {
                                 
                                     {/* Delete Button */}
                                     <button
-                                        onClick={(e) => handleDelete(doc.id, e)}
+                                        onClick={(e) => openDeleteModal(doc, e)}
                                         disabled={deletingId === doc.id}
                                         className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 disabled:opacity-50"
                                         title="Delete document"
@@ -262,6 +331,161 @@ export default function DocsPage() {
                     </div>
                 )}
             </div>
+            {/* Modal New Document */}
+            {modalMounted && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    {/* Backdrop */}
+                    <div
+                        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${modalVisible ? "opacity-100" : "opacity-0"}`}
+                        onClick={closeCreateModal}
+                    />
+                    {/* Dialog */}
+                    <div className={`relative z-10 w-full max-w-md rounded-lg bg-white shadow-xl border border-gray-200 transition-all duration-200 ease-out ${modalVisible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2"}`}>
+                        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+                            <h3 className="text-base font-semibold text-gray-900">Create New Document</h3>
+                            <button
+                                onClick={closeCreateModal}
+                                className="p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition"
+                                aria-label="Close"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateSubmit} className="px-5 py-4 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                <input
+                                    type="text"
+                                    value={formTitle}
+                                    onChange={(e) => setFormTitle(e.target.value)}
+                                    placeholder="Enter document title"
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                                <select
+                                    value={formCategory}
+                                    onChange={(e) => setFormCategory(e.target.value)}
+                                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900"
+                                >
+                                    {CATEGORIES.map((c) => (
+                                        <option key={c} value={c}>
+                                            {c}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            {formError && (
+                                <p className="text-sm text-red-600">{formError}</p>
+                            )}
+                            <div className="flex items-center justify-end gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                    onClick={closeCreateModal}
+                                    disabled={loadingCreateDoc}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 disabled:opacity-60"
+                                    disabled={loadingCreateDoc}
+                                >
+                                    {loadingCreateDoc ? (
+                                        <>
+                                            <Loader2Icon className="size-4 animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Plus className="size-4" />
+                                            Create
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Delete Document */}
+            {deleteModalMounted && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center"
+                    role="dialog"
+                    aria-modal="true"
+                >
+                    {/* Backdrop */}
+                    <div
+                        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${deleteModalVisible ? "opacity-100" : "opacity-0"}`}
+                        onClick={closeDeleteModal}
+                    />
+                    {/* Dialog */}
+                    <div className={`relative z-10 w-full max-w-md rounded-lg bg-white shadow-xl border border-gray-200 transition-all duration-200 ease-out ${deleteModalVisible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 translate-y-2"}`}>
+                        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+                            <h3 className="text-base font-semibold text-gray-900">Delete Document</h3>
+                            <button
+                                onClick={closeDeleteModal}
+                                className="p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-50 transition"
+                                aria-label="Close"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="px-5 py-4">
+                            <div className="flex items-start gap-3">
+                                <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600">
+                                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-700">Are you sure you want to delete this document?</p>
+                                    <p className="mt-1 text-sm text-gray-500">This action cannot be undone.</p>
+                                    {deleteTarget?.title && (
+                                        <p className="mt-2 text-sm text-gray-900 font-medium">{deleteTarget.title}</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="mt-6 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                    onClick={closeDeleteModal}
+                                    disabled={deletingId === deleteTarget?.id}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-60"
+                                    onClick={() => deleteTarget && handleDelete(deleteTarget.id)}
+                                    disabled={deletingId === deleteTarget?.id}
+                                >
+                                    {deletingId === deleteTarget?.id ? (
+                                        <>
+                                            <Loader2Icon className="size-4 animate-spin" />
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>Delete</>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
