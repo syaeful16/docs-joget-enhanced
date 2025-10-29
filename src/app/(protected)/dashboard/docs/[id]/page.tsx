@@ -13,9 +13,22 @@ export default function DocEditorPage() {
 
   const [content, setContent] = useState<any>(undefined);
   const [title, setTitle] = useState<string>("Untitled Document");
+  const [category, setCategory] = useState<string>("Form Element");
+  const [isEditingCategoryInline, setIsEditingCategoryInline] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const CATEGORIES = [
+    "Form Element",
+    "Permission",
+    "Validator",
+    "Plugin",
+    "App",
+    "Helper",
+    "Tutorial",
+    "Other",
+  ];
 
   // Load document
   useEffect(() => {
@@ -25,7 +38,7 @@ export default function DocEditorPage() {
     (async () => {
       const { data, error } = await supabase
         .from("docs")
-        .select("content, title")
+        .select("content, title, category")
         .eq("id", id)
         .single();
 
@@ -40,7 +53,8 @@ export default function DocEditorPage() {
       try {
         const parsed = typeof value === "string" ? JSON.parse(value) : value;
         setContent(parsed);
-        setTitle(data?.title || "Untitled Document");
+  setTitle(data?.title || "Untitled Document");
+  setCategory(data?.category || "Form Element");
       } catch (e) {
         console.error("Failed to parse content JSON:", e);
         setContent(undefined);
@@ -62,7 +76,8 @@ export default function DocEditorPage() {
         .from("docs")
         .update({ 
           content: JSON.stringify(newContent),
-          title: title
+          title: title,
+          category: category,
         })
         .eq("id", id);
 
@@ -105,6 +120,27 @@ export default function DocEditorPage() {
     }, 1000);
   };
 
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newCategory = e.target.value;
+    setCategory(newCategory);
+
+    // Debounced save for category
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (id) {
+        supabase
+          .from("docs")
+          .update({ category: newCategory })
+          .eq("id", id)
+          .then(({ error }) => {
+            if (error) {
+              console.error("Failed to save category:", error);
+            }
+          });
+      }
+    }, 800);
+  };
+
   return (
     <div className="min-h-screen">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -144,7 +180,6 @@ export default function DocEditorPage() {
                 placeholder="Untitled Document"
               />
             </div>
-            
             {/* Save Status */}
             <div className="flex items-center space-x-4 text-sm text-gray-500">
               {isSaving ? (
@@ -172,6 +207,36 @@ export default function DocEditorPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span>Last edited recently</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+              </svg>
+              {isEditingCategoryInline ? (
+                <select
+                  value={category}
+                  onChange={(e) => {
+                    handleCategoryChange(e);
+                    setIsEditingCategoryInline(false);
+                  }}
+                  onBlur={() => setIsEditingCategoryInline(false)}
+                  autoFocus
+                  className="h-7 px-2 text-xs border border-gray-300 rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCategoryInline(true)}
+                  className="text-gray-700 hover:underline decoration-dotted underline-offset-2"
+                  title="Click to change category"
+                >
+                  {category}
+                </button>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
