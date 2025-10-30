@@ -4,7 +4,6 @@ import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import DocumentCardSkeleton from "@/components/DocumentCardSkeleton";
 import { Loader2Icon, Plus, Search } from "lucide-react";
 
