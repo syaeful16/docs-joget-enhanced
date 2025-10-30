@@ -180,3 +180,35 @@ body {
 .cm-no-focus-outline .cm-editor {
   border: none; /* atau set ke 1px solid #e5e7eb */
 }
+
+/* Restore list markers for rich text editors and rendered content */
+.rte-content ul {
+  list-style: disc;
+  list-style-position: outside;
+  padding-left: 1.25rem; /* pl-5 */
+  margin: 0.25rem 0; /* my-1 */
+}
+.rte-content ol {
+  list-style: decimal;
+  list-style-position: outside;
+  padding-left: 1.25rem; /* pl-5 */
+  margin: 0.25rem 0; /* my-1 */
+}
+.rte-content li {
+  margin: 0.125rem 0; /* my-0.5 */
+}
+
+/* Make sure changelog rendered content (wrapped in .prose) shows markers */
+.prose ul {
+  list-style: disc;
+  list-style-position: outside;
+  padding-left: 1.25rem;
+}
+.prose ol {
+  list-style: decimal;
+  list-style-position: outside;
+  padding-left: 1.25rem;
+}
+.prose li {
+  margin: 0.125rem 0;
+}
