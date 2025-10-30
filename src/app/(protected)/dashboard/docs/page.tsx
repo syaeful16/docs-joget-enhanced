@@ -6,10 +6,31 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import DocumentCardSkeleton from "@/components/DocumentCardSkeleton";
-import { Loader2Icon, Plus } from "lucide-react";
+import { Loader2Icon, Plus, Search } from "lucide-react";
+
+// Hydration-safe date formatting (UTC) to avoid server/client mismatch
+function formatDateStable(iso: string): string {
+    try {
+        return (
+            new Intl.DateTimeFormat("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: false,
+                timeZone: "UTC",
+            }).format(new Date(iso)) + " UTC"
+        );
+    } catch {
+        const d = new Date(iso);
+        return isNaN(d.getTime()) ? "" : d.toISOString();
+    }
+}
 
 type Doc = {
     id: string;
+    slug: string;         // NEW
     title: string;
     created_at: string;
     is_public: boolean;
@@ -23,6 +44,14 @@ export default function DocsPage() {
 
     const [loadingDocs, setLoadingDocs] = useState<boolean>(true)
     const [loadingCreateDoc, setLoadingCreateDoc] = useState<boolean>(false)
+
+    // Search & Pagination
+    const [search, setSearch] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 9;
+    const [totalCount, setTotalCount] = useState(0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
     // Modal: New Document
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -52,24 +81,49 @@ export default function DocsPage() {
         if (!user) return;
 
         const fetchDocs = async () => {
+            setLoadingDocs(true);
             try {
-                const { data, error } = await supabase
+                const from = (page - 1) * PAGE_SIZE;
+                const to = from + PAGE_SIZE - 1;
+
+                let query = supabase
                     .from("docs")
-                    .select("id, title, is_public, created_at")
-                    .eq("user_id", user.id)
-                    .order("created_at", { ascending: false });
-        
-                if (error) console.error(error);
-                else setDocs(data || []);
+                    .select("id,slug,title,created_at,is_public", { count: "exact" })
+                    .eq("user_id", user.id);
+
+                if (debouncedSearch) {
+                    query = query.ilike("title", `%${debouncedSearch}%`);
+                }
+
+                const { data, error, count } = await query
+                    .order("created_at", { ascending: false })
+                    .range(from, to);
+
+                if (error) {
+                    console.error(error);
+                    setDocs([]);
+                    setTotalCount(0);
+                } else {
+                    setDocs(data || []);
+                    setTotalCount(count || 0);
+                }
             } catch (err) {
                 console.error(err);
+                setDocs([]);
+                setTotalCount(0);
             } finally {
                 setLoadingDocs(false);
             }
         };
-        
+
         fetchDocs();
-    }, [user]);
+    }, [user, page, debouncedSearch]);
+
+    // debounce search
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+        return () => clearTimeout(t);
+    }, [search]);
 
     // Buka modal create
     const handleOpenCreateModal = () => {
@@ -110,7 +164,7 @@ export default function DocsPage() {
                     title: formTitle.trim(),
                     category: formCategory,
                 })
-                .select("id")
+                .select("id, slug")
                 .single();
 
             if (error) {
@@ -118,9 +172,8 @@ export default function DocsPage() {
                 setFormError("Failed to create document. Please try again.");
                 return;
             }
-            // Close modal with animation and navigate
-            closeCreateModal();
-            if (data?.id) router.push(`/dashboard/docs/${data.id}`);
+            setIsModalOpen(false);
+            router.push(`/dashboard/docs/${(data?.slug || data?.id)}`);
         } finally {
             setLoadingCreateDoc(false);
         }
@@ -159,7 +212,16 @@ export default function DocsPage() {
                 alert("Failed to delete document. Please try again.");
             } else {
                 // Remove from local state
-                setDocs(docs.filter(doc => doc.id !== docId));
+                const remaining = docs.filter(doc => doc.id !== docId);
+                setDocs(remaining);
+                // Refetch to ensure pagination/count stays accurate
+                // If page becomes empty and not the first page, go back a page
+                if (remaining.length === 0 && page > 1) {
+                    setPage(page - 1);
+                } else {
+                    // trigger refetch by nudging totalCount
+                    setTotalCount((c) => Math.max(0, c - 1));
+                }
                 closeDeleteModal();
             }
         } catch (error) {
@@ -173,7 +235,7 @@ export default function DocsPage() {
     if (loadingDocs) {
         return (
             <div className="min-h-screen bg-gray-50/50">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     {/* Breadcrumb Skeleton */}
                     <div className="flex mb-8 animate-pulse">
                         <div className="h-4 bg-gray-200 rounded w-20"></div>
@@ -203,9 +265,9 @@ export default function DocsPage() {
 
     return (
         <div className="min-h-screen bg-gray-50/50">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="h-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-22">
                 {/* Breadcrumb */}
-                <nav className="flex mb-8" aria-label="Breadcrumb">
+                <nav className="flex" aria-label="Breadcrumb">
                     <ol className="inline-flex items-center space-x-1 md:space-x-3">
                         <li>
                             <div className="flex items-center">
@@ -219,25 +281,37 @@ export default function DocsPage() {
                 </nav>
 
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
-                    <div className="mb-4 sm:mb-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-16">
+                    <div className="mb-1 sm:mb-0">
                         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Documents</h1>
-                        <p className="mt-2 text-sm text-gray-600">Create and manage your documentation</p>
+                        <p className="mt-1 text-sm text-gray-600">Create and manage your documentation</p>
                     </div>
-                    <button
-                        onClick={handleOpenCreateModal}
-                        className="inline-flex items-center gap-2 px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
-                    >
-                        {loadingCreateDoc ? (
-                            <Loader2Icon
-                                aria-label="Loading"
-                                className="size-4 animate-spin"
+                    <div className="flex w-full sm:w-auto items-center gap-2">
+                        <div className="relative w-full sm:w-72">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={e => { setSearch(e.target.value); setPage(1); }}
+                                placeholder="Search by title..."
+                                className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900"
                             />
-                        ): (
-                            <Plus className="size-4"/>
-                        )}
-                        New Document
-                    </button>
+                        </div>
+                        <button
+                            onClick={handleOpenCreateModal}
+                            className="inline-flex items-center gap-2 px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
+                        >
+                            {loadingCreateDoc ? (
+                                <Loader2Icon
+                                    aria-label="Loading"
+                                    className="size-4 animate-spin"
+                                />
+                            ): (
+                                <Plus className="size-4"/>
+                            )}
+                            New Document
+                        </button>
+                    </div>
                 </div>
 
                 {/* Documents Grid */}
@@ -248,8 +322,8 @@ export default function DocsPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                         </div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
-                        <p className="text-gray-500 mb-8 max-w-sm mx-auto">Get started by creating your first document to organize your thoughts and ideas.</p>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No documents found</h3>
+                        <p className="text-gray-500 mb-8 max-w-sm mx-auto">Try adjusting your search or create a new document.</p>
                         <button
                             onClick={handleOpenCreateModal}
                             className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
@@ -261,74 +335,110 @@ export default function DocsPage() {
                         </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {docs.map((doc) => (
-                            <div
-                                key={doc.id}
-                                className="group bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md hover:border-gray-300 transition-all duration-200 cursor-pointer relative"
-                                onClick={() => router.push(`/dashboard/docs/${doc.id}`)}
-                            >
-                                {/* Document Header */}
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                                            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {docs.map((doc) => (
+                                <div
+                                    key={doc.id}
+                                    className="group bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md hover:border-gray-300 transition-all duration-200 cursor-pointer relative"
+                                    onClick={() => router.push(`/dashboard/docs/${doc.slug || doc.id}`)}
+                                >
+                                    {/* Document Header */}
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="text-sm font-medium text-gray-900 truncate group-hover:text-gray-700 transition-colors">
+                                                    {doc.title}
+                                                </h3>
+                                            </div>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-medium text-gray-900 truncate group-hover:text-gray-700 transition-colors">
-                                                {doc.title}
-                                            </h3>
+                                    
+                                        {/* Delete Button */}
+                                        <button
+                                            onClick={(e) => openDeleteModal(doc, e)}
+                                            disabled={deletingId === doc.id}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 disabled:opacity-50"
+                                            title="Delete document"
+                                        >
+                                            {deletingId === doc.id ? (
+                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                                            ) : (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {/* Document Info */}
+                                    <div className="space-y-2">
+                                        <p className="text-xs text-gray-500">Created {formatDateStable(doc.created_at)}</p>
+                                        <div className="w-full flex items-center justify-between">
+                                            <div className="flex items-center text-xs text-gray-400">
+                                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Last edited recently
+                                            </div>
+                                            <div className={`flex items-center text-xs border ${doc.is_public ? "text-green-500 bg-green-50 border-green-200" : "text-red-500 bg-red-50 border-red-200"} rounded-xl px-3 py-0.5`}>
+                                                <p>{doc.is_public ? "Public" : "Private"}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                
-                                    {/* Delete Button */}
-                                    <button
-                                        onClick={(e) => openDeleteModal(doc, e)}
-                                        disabled={deletingId === doc.id}
-                                        className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all duration-200 disabled:opacity-50"
-                                        title="Delete document"
-                                    >
-                                        {deletingId === doc.id ? (
-                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                                        ) : (
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        )}
-                                    </button>
-                                </div>
 
-                                {/* Document Info */}
-                                <div className="space-y-2">
-                                    <p className="text-xs text-gray-500">
-                                        Created {new Date(doc.created_at).toLocaleDateString('en-US', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        })}
-                                    </p>
-                                    <div className="w-full flex items-center justify-between">
-                                        <div className="flex items-center text-xs text-gray-400">
-                                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            Last edited recently
-                                        </div>
-                                        <div className={`flex items-center text-xs border ${doc.is_public ? "text-green-500 bg-green-50 border-green-200" : "text-red-500 bg-red-50 border-red-200"} rounded-xl px-3 py-0.5`}>
-                                            <p>{doc.is_public ? "Public" : "Private"}</p>
-                                        </div>
-                                    </div>
+                                    {/* Hover indicator */}
+                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-900 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
                                 </div>
+                            ))}
+                        </div>
 
-                                {/* Hover indicator */}
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-900 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+                        {/* Pagination */}
+                        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm text-gray-600">
+                                {totalCount > 0 ? (
+                                    <>Showing <span className="font-medium">{(page - 1) * PAGE_SIZE + 1}</span>–<span className="font-medium">{Math.min(page * PAGE_SIZE, totalCount)}</span> of <span className="font-medium">{totalCount}</span></>
+                                ) : (
+                                    <>No results</>
+                                )}
+                            </p>
+                            <div className="inline-flex items-center gap-1">
+                                <button
+                                    onClick={() => setPage(1)}
+                                    disabled={page === 1}
+                                    className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    First
+                                </button>
+                                <button
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Prev
+                                </button>
+                                <span className="px-2 text-sm text-gray-600">Page {page} of {totalPages}</span>
+                                <button
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={page === totalPages}
+                                    className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Next
+                                </button>
+                                <button
+                                    onClick={() => setPage(totalPages)}
+                                    disabled={page === totalPages}
+                                    className="px-3 py-1.5 text-sm rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Last
+                                </button>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    </>
                 )}
             </div>
             {/* Modal New Document */}
